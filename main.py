@@ -1,5 +1,7 @@
 import tkinter as tk
 import time
+import datetime
+import sqlite3
 
 # This is a program that allows users to track their study time using the Pomodoro technique
 
@@ -23,17 +25,16 @@ class App(tk.Tk):
         timer.place(in_ = clock, anchor="center", relx=.5, rely=.5)
 
 
-
-
-
         # Configure grid to make columns resizable
         container.grid_columnconfigure(0, weight=1)
         container.grid_columnconfigure(1, weight=1)
         container.grid_rowconfigure(0, weight=1)
 
+
         # Place Clock and SessionData frames inside container
         clock.grid(row=0, column=0, sticky="nsew")
         sessionData.grid(row=0, column=1, sticky="nsew")
+
 
 
         # Place labels for Clock, SessionData, and Timer frames
@@ -48,11 +49,11 @@ class App(tk.Tk):
         # calls the Timer class
         self.timer = Timer(self.timerLabel)
 
-        # Button to start the timer
+        button2 = tk.Button(clock, text="RESET", bg="black", fg="white", font=("Terminal", 14), command=self.timer.resetTimer)
+        button2.pack(side="bottom")
         button1 = tk.Button(clock, text="START", bg="black", fg="white", font=("Terminal", 14), command=self.timer.startTimer)
-        button1.pack(side="bottom", padx=20, pady=140)
-        button2 = tk.Button(clock, text="RESET", bg="black", fg ="white", font=("Terminal", 14), command=self.timer.resetTimer)
-        button2.pack(side="bottom", padx=20, pady=80)
+        button1.pack(side ="bottom")
+
 
 
 # Timer class that starts and resets the timer
@@ -76,6 +77,7 @@ class Timer:
     def resetTimer(self):
         if self.isRunning:
             self.isRunning = False
+            self.updateTimer()
 
 
     # updates the timer as it is running
@@ -84,12 +86,25 @@ class Timer:
             remaining_time = int(self.endTime - time.time())
             if remaining_time <= 0:
                 self.label.config(text="00:00")
+    # calls sessionComplete function when session is over
+                self.sessionComplete(complete = True)
                 self.isRunning = False
             else:
                 minutes = remaining_time // 60
                 seconds = remaining_time % 60
                 self.label.config(text=f"{minutes:02d}:{seconds:02d}")
                 self.label.after(1000, self.updateTimer)
+        if not self.isRunning:
+            self.label.config(text="25:00")
+
+    # calls convertTime function in TimeStamp class when session is completed
+    def sessionComplete(self, complete):
+        if complete == True:
+            TimeStamp.convertTime(complete)
+        else:
+            print("You cannot create a timestamp")
+
+
 
 
 
@@ -115,6 +130,19 @@ class SessionData(tk.Frame):
         tk.Frame.__init__(self, parent)
         self.controller = controller
         self.configure(background="dark goldenrod")
+
+class TimeStamp():
+
+    # initializes timestamp class
+    def __init__(self, endTime):
+        self.endTime = endTime
+
+    # uses python datetime module to create timestamp of completed session
+    def convertTime(self):
+        stamp = datetime.datetime.now()
+        print(stamp)
+
+
 
 app = App()
 app.minsize(750, 500)
