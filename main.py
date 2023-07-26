@@ -1,7 +1,8 @@
 import tkinter as tk
 import time
-import datetime
 import sqlite3
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 # This is a program that allows users to track their study time using the Pomodoro technique
 
@@ -14,6 +15,9 @@ class App(tk.Tk):
         self.title("Pomodoro App")
 
 
+
+
+
         # Create a container frame for the two frames
         container = tk.Frame(self)
         container.pack(fill="both", expand = True)
@@ -21,6 +25,20 @@ class App(tk.Tk):
         # Place clock and session data in container frame
         clock = Clock(container, controller=self)
         sessionData = SessionData(container, controller=self)
+        graph = tk.Frame(sessionData, height = 150, width = 150)
+        graph.place(in_= sessionData, anchor="center", relx=.5, rely=.5)
+        fig, ax = plt.subplots(figsize = (3, 2))
+
+        # sample graph with sample data
+        x_data = ["M", "Tu", "W", "Th", "F", "Sa", "Su"]
+        y_data = [1, 2, 4, 5, 6, 4, 3]
+        ax.bar(x_data, y_data)
+        canvas = FigureCanvasTkAgg(fig, master = graph)
+        canvas.draw()
+        canvas.get_tk_widget().pack()
+
+
+        # add timer frame to clock frame
         timer = tk.Frame(clock, height=150, width=250)
         timer.place(in_ = clock, anchor="center", relx=.5, rely=.5)
 
@@ -70,7 +88,7 @@ class Timer:
     def startTimer(self):
         if not self.isRunning:
             self.isRunning = True
-            self.endTime = time.time() + (25 * 60)
+            self.endTime = time.time() + (1 * 5)
             self.updateTimer()
 
     #resets the timer
@@ -97,15 +115,19 @@ class Timer:
         if not self.isRunning:
             self.label.config(text="25:00")
 
-    # calls convertTime function in TimeStamp class when session is completed
+    # Calls insert time function if session is complete
     def sessionComplete(self, complete):
-        if complete == True:
-            TimeStamp.convertTime(complete)
-        else:
-            print("You cannot create a timestamp")
+        if complete:
+            self.insertTime()
 
 
-
+    # Insert time into database when a session is completed
+    def insertTime(self):
+        with Database('sessionData.sqlite') as db:
+            db.execute('CREATE TABLE IF NOT EXISTS date(date_completed TIMESTAMP)')
+            db.execute('INSERT INTO date (date_completed) VALUES (current_date)')
+            comments = db.query('SELECT * FROM date')
+            print(comments)
 
 
 
@@ -114,7 +136,7 @@ class Timer:
 
 
 class Clock(tk.Frame):
-    # initializes Clock frame as a child of parent container
+    # initializes Clock frame as a child of container frame
     def __init__(self, parent, controller):
         tk.Frame.__init__(self, parent)
         self.controller = controller
@@ -123,24 +145,103 @@ class Clock(tk.Frame):
 
 
 
-# initializes frame containing session data
+
 class SessionData(tk.Frame):
     # initializes Session Data frame as a child of container frame
     def __init__(self, parent, controller):
         tk.Frame.__init__(self, parent)
         self.controller = controller
-        self.configure(background="dark goldenrod")
+        self.configure(background="saddle brown")
 
-class TimeStamp():
 
-    # initializes timestamp class
-    def __init__(self, endTime):
-        self.endTime = endTime
 
-    # uses python datetime module to create timestamp of completed session
-    def convertTime(self):
-        stamp = datetime.datetime.now()
-        print(stamp)
+
+
+
+
+class Database:
+    # Initializes the Database class with specified name of the SQLite database file
+    def __init__(self, name):
+        self._conn = sqlite3.connect(name)
+        self._cursor = self._conn.cursor()
+
+    # Enables the usage of 'with' statement to ensure proper closing of the database connection
+    def __enter__(self):
+        return self
+
+    # Closes the database connection when the 'with' statement is exited
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    # Property method to access the database connection externally
+    @property
+    def connection(self):
+        return self._conn
+
+    # Property method to access the database cursor externally
+    @property
+    def cursor(self):
+        return self._cursor
+
+    # Commits the changes made to the database
+    def commit(self):
+        self.connection.commit()
+
+    # Closes the database connection
+    def close(self, commit=True):
+        if commit:
+            self.commit()
+        self.connection.close()
+
+    # Executes an SQL query with optional parameters
+    def execute(self, sql, params=None):
+        self.cursor.execute(sql, params or ())
+
+    # Fetches all the rows returned by the most recent query
+    def fetchall(self):
+        return self.cursor.fetchall()
+
+    # Fetches the next row returned by the most recent query
+    def fetchone(self):
+        return self.cursor.fetchone()
+
+    # Executes an SQL query and returns the result as a list of rows
+    def query(self, sql, params=None):
+        self.cursor.execute(sql, params or ())
+        return self.fetchall()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
