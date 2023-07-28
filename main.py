@@ -18,6 +18,13 @@ class App(tk.Tk):
 
 
 
+
+
+
+
+
+
+
         # Create a container frame for the two frames
         container = tk.Frame(self)
         container.pack(fill="both", expand = True)
@@ -25,17 +32,26 @@ class App(tk.Tk):
         # Place clock and session data in container frame
         clock = Clock(container, controller=self)
         sessionData = SessionData(container, controller=self)
-        graph = tk.Frame(sessionData, height = 150, width = 150)
-        graph.place(in_= sessionData, anchor="center", relx=.5, rely=.5)
-        fig, ax = plt.subplots(figsize = (3, 2))
 
-        # sample graph with sample data
-        x_data = ["M", "Tu", "W", "Th", "F", "Sa", "Su"]
-        y_data = [1, 2, 4, 5, 6, 4, 3]
-        ax.bar(x_data, y_data)
-        canvas = FigureCanvasTkAgg(fig, master = graph)
-        canvas.draw()
-        canvas.get_tk_widget().pack()
+        self.studyHours = tk.Label()
+
+
+        graph = tk.Frame(sessionData, height = 150, width = 200)
+        graph.place(in_= sessionData, anchor="center", relx=.5, rely=.5)
+
+        self.fig, self.ax = plt.subplots(figsize=(3, 3))
+        self.canvas = FigureCanvasTkAgg(self.fig, master=graph)
+        self.canvas.get_tk_widget().pack()
+
+        # Update the graph initially
+        self.updateGraph()
+
+
+
+
+
+
+
 
 
         # add timer frame to clock frame
@@ -56,21 +72,61 @@ class App(tk.Tk):
 
 
         # Place labels for Clock, SessionData, and Timer frames
-        label = tk.Label(clock, text ="Study Timer", bg = "black",fg ="white", font = ("Terminal",20))
+        label = tk.Label(clock, text="Study Timer", bg="black", fg="white", font = ("Terminal",20))
         label.pack(padx=5, pady=5)
-        self.timerLabel = tk.Label(timer, text = "25:00", bg ="black", fg ="white", font = ("Terminal", 30))
+        self.timerLabel = tk.Label(timer, text="25:00", bg ="black", fg="white", font=("Terminal", 30))
         self.timerLabel.pack()
-        sessionLabel = tk.Label(sessionData, text ="Session Data", bg ="black", fg="white", font = ("Terminal", 20))
+        sessionLabel = tk.Label(sessionData, text="Session Data", bg="black", fg="white", font=("Terminal", 20))
         sessionLabel.pack()
+        self.totalHoursLabel = tk.Label(sessionData, text = "Total hours studied this week:",
+                                         bg="black", fg="white", font=("Terminal", 12))
+        self.totalHoursLabel.pack()
+
+
+        self.updateHours()
+
 
 
         # calls the Timer class
-        self.timer = Timer(self.timerLabel)
+        self.timer = Timer(self.timerLabel, self)
 
         button2 = tk.Button(clock, text="RESET", bg="black", fg="white", font=("Terminal", 14), command=self.timer.resetTimer)
         button2.pack(side="bottom")
         button1 = tk.Button(clock, text="START", bg="black", fg="white", font=("Terminal", 14), command=self.timer.startTimer)
         button1.pack(side ="bottom")
+
+    def updateGraph(self):
+        # Initialize hours_studied with zeros for all days of the week
+        hoursStudied = [0] * 7
+
+        # Retrieve data from the database and update hours_studied
+        with Database('sessionDatabase.sqlite') as db:
+            sessionsByDay = db.getSessionByDayOfWeek()
+            for day, sessionCount in sessionsByDay:
+                hoursStudied[int(day)] = sessionCount * 25 / 60
+
+        # Clear the previous data and update the graph
+        self.ax.clear()
+        xData = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+        self.ax.bar(xData, hoursStudied)
+        self.ax.set_title("Weekly Study Hours")
+        self.ax.set_yticks(range(1, 11))
+        self.canvas.draw()
+
+
+    def updateHours(self):
+        with Database('sessionDatabase.sqlite') as db:
+            db.execute(f"SELECT COUNT(*) FROM date")
+            totalSessions = db.fetchone()[0]
+        self.totalHoursLabel.config(text=f"Total Hours: {totalSessions * 30 / 60}")
+
+
+
+
+
+
+
+
 
 
 
@@ -78,9 +134,11 @@ class App(tk.Tk):
 class Timer:
 
     # initializes the timer class
-    def __init__(self, label):
+    def __init__(self, label, appInstance):
         self.label = label
         self.isRunning = False
+        self.appInstance = appInstance
+
 
 
 
@@ -88,7 +146,7 @@ class Timer:
     def startTimer(self):
         if not self.isRunning:
             self.isRunning = True
-            self.endTime = time.time() + (1 * 5)
+            self.endTime = time.time() + (60 * 25)
             self.updateTimer()
 
     #resets the timer
@@ -104,6 +162,7 @@ class Timer:
             remaining_time = int(self.endTime - time.time())
             if remaining_time <= 0:
                 self.label.config(text="00:00")
+                self.appInstance.updateWeeklyHours()
     # calls sessionComplete function when session is over
                 self.sessionComplete(complete = True)
                 self.isRunning = False
@@ -123,11 +182,17 @@ class Timer:
 
     # Insert time into database when a session is completed
     def insertTime(self):
-        with Database('sessionData.sqlite') as db:
+        with Database('sessionDatabase.sqlite') as db:
             db.execute('CREATE TABLE IF NOT EXISTS date(date_completed TIMESTAMP)')
             db.execute('INSERT INTO date (date_completed) VALUES (current_date)')
             comments = db.query('SELECT * FROM date')
+
             print(comments)
+        self.appInstance.updateGraph()
+
+
+
+        
 
 
 
@@ -164,6 +229,7 @@ class Database:
     def __init__(self, name):
         self._conn = sqlite3.connect(name)
         self._cursor = self._conn.cursor()
+        self.table = self.createTable()
 
     # Enables the usage of 'with' statement to ensure proper closing of the database connection
     def __enter__(self):
@@ -172,6 +238,19 @@ class Database:
     # Closes the database connection when the 'with' statement is exited
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
+
+    def createTable(self):
+        self.execute('CREATE TABLE IF NOT EXISTS date(date_completed TIMESTAMP)')
+
+
+    def getSessionByDayOfWeek(self):
+        sql = """
+            SELECT strftime('%w', date_completed) AS day, COUNT(*) AS sessions
+            FROM date
+            GROUP BY day
+        """
+        self.execute(sql)
+        return self.fetchall()
 
     # Property method to access the database connection externally
     @property
